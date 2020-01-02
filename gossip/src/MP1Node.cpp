@@ -253,6 +253,8 @@ void MP1Node::addToMembershipList(Address& addr) {
 
     MemberListEntry e(id,port,1/*heartbeat*/, par->getcurrtime());
     memberNode->memberList.push_back(e);
+
+    log->logNodeAdd(&memberNode->addr, addr.addr);
 }
 
 void MP1Node::send(Address& addr, msgType type) {
@@ -291,6 +293,8 @@ void MP1Node::mergeMembership(Address& addr, void* ptr, int size) {
             MemberListEntry e(*entry);
             e.timestamp = par->getcurrtime();
             memberNode->memberList.push_back(e);
+            Address addr = getAddress(e.getid(), e.getport());
+            log->logNodeAdd(&memberNode->addr, &addr);
         }
         entry++;
     }
@@ -325,20 +329,26 @@ void MP1Node::nodeLoopOps() {
                 memberNode->memberList.erase(memberNode->memberList.begin() + i);
             }
         }
-        Address addr;
-        memcpy(addr.addr, &removeEntry.id, sizeof(int));
-        memcpy(addr.addr + sizeof(int), &removeEntry.port, sizeof(short));
+        Address addr = getAddress(removeEntry.getid(), removeEntry.getport());
         log->logNodeRemove(&memberNode->addr, &addr);
     }
 
-    int size = memberNode->memberList.size();
-    size_t msgsize = sizeof(MessageHdr);
-    msg = (MessageHdr *) malloc(msgsize * sizeof(char));
-    msg->msgType == PING;
-    msg->addr = memberNode->addr;
-    msg->ptr = (void*) memberNode->memberList.data();
-    msg->size = size;
-    emulNet->ENsend(&memberNode->addr, &addr, (char*) msg, msgsize)
+    for (auto& myEntry : memberNode->memberList.size()) {
+        Address addr = getAddress(myEntry.getid(), myEntry.getport());
+        if (addr == memberNode->addr) {
+            continue;
+        }
+        send(addr,PING);
+    }
+}
+
+Address MP1Node::getAddress(int id, short port) {
+
+    Address addr;
+    memcpy(addr.addr, &id, sizeof(int));
+    memcpy(addr.addr + sizeof(int), &port, sizeof(short));
+
+    return addr;
 }
 
 /**
