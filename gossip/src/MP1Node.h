@@ -31,7 +31,8 @@
 enum MsgTypes{
     JOINREQ,
     JOINREP,
-    PING
+    PING,
+	DEFAULT
 };
 
 /**
@@ -41,6 +42,9 @@ enum MsgTypes{
  */
 typedef struct MessageHdr {
 	enum MsgTypes msgType;
+	Address addr;
+	int size; //memberList.size()
+	void* ptr; // MemberListEntry* start address
 }MessageHdr;
 
 /**

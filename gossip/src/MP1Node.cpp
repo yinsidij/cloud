@@ -218,8 +218,82 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 	/*
 	 * Your code goes here
 	 */
-	Member* member = (Member*) env;
+	MessageHdr* msg = (MessageHdr*) data;
+    Address addr = msg->addr;
+    if (msg->msgType == JOINREQ) {
 
+        addToMembershipList(addr);
+        send(addr, JOINREP);
+
+    } else if (msg->msgType == JOINREP) {
+        memberNode->inGroup = true;
+        addToMembershipList(addr);
+
+    } else if (msg->msgType == PING) {
+        mergeMembership(addr, msg->ptr, msg->size);
+    }
+
+    delete msg;
+
+}
+
+void MP1Node::addToMembershipList(Address& addr) {
+    int id;
+    short port;
+    memcpy(&id,   &addr.addr[0], sizeof(int));
+    memcpy(&port, &addr.addr[4], sizeof(short));
+
+    for (auto& myEntry : memberNode->memberList) {
+        if (id == myEntry.getid() && port == myEntry.getport()) {
+            //exist in the membershiplist
+            myEntry.timestamp = par->getcurrtime();
+            return;
+        }
+    }
+
+    MemberListEntry e(id,port,1/*heartbeat*/, par->getcurrtime());
+    memberNode->memberList.push_back(e);
+}
+
+void MP1Node::send(Address& addr, msgType type) {
+    int size = memberNode->memberList.size();
+//    int listsize = sizeof(MemberListEntry) * size;
+//    MemberListEntry* ptr = (MemberListEntry*) malloc(listsize);
+//    MemberListEntry* ptr_src = memberNode->memberList.data();
+
+//    for (int i=0;i<size;i++) {
+//        memcpy(ptr+i, ptr_src+i, sizeof(MemberListEntry));
+//    }
+
+    size_t msgsize = sizeof(MessageHdr);
+    msg = (MessageHdr *) malloc(msgsize * sizeof(char));
+    msg->msgType == type;
+    msg->addr = memberNode->addr;
+    msg->ptr = (void*) memberNode->memberList.data();
+    msg->size = size;
+    emulNet->ENsend(&memberNode->addr, &addr, (char*) msg, msgsize);
+}
+
+void MP1Node::mergeMembership(Address& addr, void* ptr, int size) {
+
+    MemberListEntry* entry = (MemberListEntry*) ptr;
+    for (int i=0;i<size;i++) {
+        bool found=false;
+        for (auto& myEntry : memberNode->memberList) {
+            if (myEntry.getid() == entry->getid() && myEntry.getport() == entry->getport()) {
+                found=true;
+                myEntry.heartbeat = max(myEntry.hearbeat, entry->heartbeat);
+                myEntry.timestamp = par->getcurrtime();
+            }
+        }
+        if (!found) {
+            // new entry
+            MemberListEntry e(*entry);
+            e.timestamp = par->getcurrtime();
+            memberNode->memberList.push_back(e);
+        }
+        entry++;
+    }
 }
 
 /**
@@ -234,9 +308,37 @@ void MP1Node::nodeLoopOps() {
 	/*
 	 * Your code goes here
 	 */
-	for (auto member : membershipList) {}
+    memberNode->heartbeat++;
 
-    return;
+    vector<MemberListEntry> toRemoveList;
+    for (auto& myEntry : memberNode->memberList) {
+        if (par->getcurrtime() - myEntry.timestamp >= TREMOVE) {
+            toRemoveList.push_back(myEntry);
+        } 
+    }
+
+    int size = memberNode->memberList.size();
+    for (auto& removeEntry : toRemoveList) {
+        
+        for (int i=0;i<size;i++) {
+            if (memberNode->memberList[i].getid() == removeEntry.getid && memberNode->memberList[i].getport == removeEntry.getport()) {
+                memberNode->memberList.erase(memberNode->memberList.begin() + i);
+            }
+        }
+        Address addr;
+        memcpy(addr.addr, &removeEntry.id, sizeof(int));
+        memcpy(addr.addr + sizeof(int), &removeEntry.port, sizeof(short));
+        log->logNodeRemove(&memberNode->addr, &addr);
+    }
+
+    int size = memberNode->memberList.size();
+    size_t msgsize = sizeof(MessageHdr);
+    msg = (MessageHdr *) malloc(msgsize * sizeof(char));
+    msg->msgType == PING;
+    msg->addr = memberNode->addr;
+    msg->ptr = (void*) memberNode->memberList.data();
+    msg->size = size;
+    emulNet->ENsend(&memberNode->addr, &addr, (char*) msg, msgsize)
 }
 
 /**
