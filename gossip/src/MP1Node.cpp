@@ -136,6 +136,7 @@ int MP1Node::introduceSelfToGroup(Address *joinaddr) {
 
         // create JOINREQ message: format of data is {struct Address myaddr}
         msg->msgType = JOINREQ;
+        msg->addr = memberNode->addr;
         memcpy((char *)(msg+1), &memberNode->addr.addr, sizeof(memberNode->addr.addr));
         memcpy((char *)(msg+1) + 1 + sizeof(memberNode->addr.addr), &memberNode->heartbeat, sizeof(long));
 
@@ -218,7 +219,7 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 	/*
 	 * Your code goes here
 	 */
-	MessageHdr* msg = (MessageHdr*) data;
+    MessageHdr* msg = (MessageHdr*) data;
     Address addr = msg->addr;
     if (msg->msgType == JOINREQ) {
 
@@ -227,7 +228,7 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 
     } else if (msg->msgType == JOINREP) {
         memberNode->inGroup = true;
-        addToMembershipList(addr);
+        addToMembershipList(memberNode->addr);
 
     } else if (msg->msgType == PING) {
         mergeMembership(addr, msg->ptr, msg->size);
@@ -274,6 +275,15 @@ void MP1Node::send(Address& addr, MsgTypes type) {
     msg->ptr = (void*) memberNode->memberList.data();
     msg->size = size;
     emulNet->ENsend(&memberNode->addr, &addr, (char*) msg, msgsize);
+    string logging = "sending to " + addr.getAddress();
+    if (type == PING) {
+   	logging += " PING";	 
+    } else if (type == JOINREQ) {
+   	logging += " JOINREQ"; 
+    } else if (type == JOINREP) {
+   	logging += " JOINREP"; 
+    }
+    log->LOG(&memberNode->addr, logging.c_str());
 }
 
 void MP1Node::mergeMembership(Address& addr, void* ptr, int size) {
