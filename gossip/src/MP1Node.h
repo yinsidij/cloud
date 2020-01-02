@@ -60,6 +60,11 @@ private:
 	Member *memberNode;
 	char NULLADDR[6];
 
+ 	void addToMembershipList(Address& addr);
+	void mergeMembership(Address& addr, void* ptr, int size);
+ 	void send(Address& addr, MsgTypes type);
+	Address getAddress(int id, short port);
+
 public:
 	MP1Node(Member *, Params *, EmulNet *, Log *, Address *);
 	Member * getMemberNode() {

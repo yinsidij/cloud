@@ -254,10 +254,10 @@ void MP1Node::addToMembershipList(Address& addr) {
     MemberListEntry e(id,port,1/*heartbeat*/, par->getcurrtime());
     memberNode->memberList.push_back(e);
 
-    log->logNodeAdd(&memberNode->addr, addr.addr);
+    log->logNodeAdd(&memberNode->addr, &addr);
 }
 
-void MP1Node::send(Address& addr, msgType type) {
+void MP1Node::send(Address& addr, MsgTypes type) {
     int size = memberNode->memberList.size();
 //    int listsize = sizeof(MemberListEntry) * size;
 //    MemberListEntry* ptr = (MemberListEntry*) malloc(listsize);
@@ -268,8 +268,8 @@ void MP1Node::send(Address& addr, msgType type) {
 //    }
 
     size_t msgsize = sizeof(MessageHdr);
-    msg = (MessageHdr *) malloc(msgsize * sizeof(char));
-    msg->msgType == type;
+    MessageHdr* msg = (MessageHdr *) malloc(msgsize * sizeof(char));
+    msg->msgType = type;
     msg->addr = memberNode->addr;
     msg->ptr = (void*) memberNode->memberList.data();
     msg->size = size;
@@ -284,7 +284,7 @@ void MP1Node::mergeMembership(Address& addr, void* ptr, int size) {
         for (auto& myEntry : memberNode->memberList) {
             if (myEntry.getid() == entry->getid() && myEntry.getport() == entry->getport()) {
                 found=true;
-                myEntry.heartbeat = max(myEntry.hearbeat, entry->heartbeat);
+                myEntry.heartbeat = max(myEntry.heartbeat, entry->heartbeat);
                 myEntry.timestamp = par->getcurrtime();
             }
         }
@@ -325,7 +325,7 @@ void MP1Node::nodeLoopOps() {
     for (auto& removeEntry : toRemoveList) {
         
         for (int i=0;i<size;i++) {
-            if (memberNode->memberList[i].getid() == removeEntry.getid && memberNode->memberList[i].getport == removeEntry.getport()) {
+            if (memberNode->memberList[i].getid() == removeEntry.getid() && memberNode->memberList[i].getport() == removeEntry.getport()) {
                 memberNode->memberList.erase(memberNode->memberList.begin() + i);
             }
         }
@@ -333,7 +333,7 @@ void MP1Node::nodeLoopOps() {
         log->logNodeRemove(&memberNode->addr, &addr);
     }
 
-    for (auto& myEntry : memberNode->memberList.size()) {
+    for (auto& myEntry : memberNode->memberList) {
         Address addr = getAddress(myEntry.getid(), myEntry.getport());
         if (addr == memberNode->addr) {
             continue;
