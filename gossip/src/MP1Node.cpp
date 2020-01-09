@@ -228,7 +228,7 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 
     } else if (msg->msgType == JOINREP) {
         memberNode->inGroup = true;
-        addToMembershipList(memberNode->addr);
+        mergeMembership(addr, msg->ptr, msg->size);
 
     } else if (msg->msgType == PING) {
         mergeMembership(addr, msg->ptr, msg->size);
