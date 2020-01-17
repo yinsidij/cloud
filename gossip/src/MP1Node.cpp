@@ -418,3 +418,30 @@ void MP1Node::printAddress(Address *addr)
     printf("%d.%d.%d.%d:%d \n",  addr->addr[0],addr->addr[1],addr->addr[2],
                                                        addr->addr[3], *(short*)&addr->addr[4]) ;    
 }
+	
+char* serializedMembership(vector<MemberListEntry>& membershipList) {
+	int size = membershipList.size();
+	size_t totalSize = sizeof(MemberListEntry)*size;
+	MemberListEntry* ptr = (MemberListEntry*) malloc(totalSize);
+
+	for (int i=0;i<size;i++) {
+		memcpy((char*)(ptr+i), &memberNode->memberList[i], sizeof(MemberListEntry));
+	}
+	return (char*) ptr;
+}
+
+
+void deserializedMembership(char* data, int size, vector<MemberListEntry>& membershipList) {
+	//memcpy((char *)(msg+1) + 1 + sizeof(memberNode->addr.addr), &memberNode->heartbeat, sizeof(long));
+	//
+	int prefixSize = sizeof(MessageHdr)+sizeof(memberNode->addr.addr)+1;
+	int allEntrySize = size - prefixSize;
+	char* ptr = (char*)(data + prefixSize);
+
+	int numOfEntries = allEntrySize/sizeof(MemberListEntry);
+	MemberListEntry* pEntry = (MemberListEntry*) ptr;
+	for (int i=0;i<numOfEntries;i++) {
+		membershipList.push_back(*pEntry);
+		pEntry++;
+	}
+}

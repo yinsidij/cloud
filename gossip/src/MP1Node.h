@@ -32,7 +32,7 @@ enum MsgTypes{
     JOINREQ,
     JOINREP,
     PING,
-	DEFAULT
+    DEFAULT
 };
 
 /**
@@ -42,9 +42,6 @@ enum MsgTypes{
  */
 typedef struct MessageHdr {
 	enum MsgTypes msgType;
-	Address addr;
-	int size; //memberList.size()
-	void* ptr; // MemberListEntry* start address
 }MessageHdr;
 
 /**
@@ -62,6 +59,8 @@ private:
 
  	void addToMembershipList(Address& addr);
 	void mergeMembership(Address& addr, void* ptr, int size);
+	char* serializedMembership(vector<MemberListEntry>& membershipList);
+	void deserializedMembership(char* data, int size, vector<MemberListEntry>& membershipList);
  	void send(Address& addr, MsgTypes type);
 	Address getAddress(int id, short port);
 
