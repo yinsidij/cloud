@@ -300,6 +300,7 @@ void MP1Node::mergeMembership(Address& addr, vector<MemberListEntry>& membership
 	MemberListEntry entry = membershipList[i];
         bool found=false;
         for (auto& myEntry : memberNode->memberList) {
+	    // myEntry is self --- TODO
             if (myEntry.getid() == entry.getid() && myEntry.getport() == entry.getport()) {
                 found=true;
 		if (entry.heartbeat > myEntry.heartbeat) {
@@ -333,10 +334,22 @@ void MP1Node::nodeLoopOps() {
 	 */
     memberNode->heartbeat++;
 
+    int id;
+    int port;
+    memcpy(&id, &memberNode->addr.addr[0], sizeof(int));
+    memcpy(&port, &memberNode->addr.addr[4], sizeof(short));
     vector<MemberListEntry> toRemoveList;
     vector<MemberListEntry> newMemberList;
 
     for (auto& myEntry : memberNode->memberList) {
+        //string logging0 = "par->getcurrtime()  = " + to_string(par->getcurrtime()) + "; " + to_string(myEntry.getid()) + " timestamp = " + to_string(myEntry.timestamp);
+        //log->LOG(&memberNode->addr, logging0.c_str());
+	if (id == myEntry.getid() && port == myEntry.getport()) {
+	// self. don't remove, but update the entry
+	    myEntry.setheartbeat(memberNode->heartbeat);
+	    myEntry.settimestamp(par->getcurrtime());
+	    continue;
+	}
         if (par->getcurrtime() - myEntry.timestamp >= TREMOVE) {
             toRemoveList.push_back(myEntry);
         } 
@@ -369,6 +382,7 @@ void MP1Node::nodeLoopOps() {
     size = memberNode->memberList.size();
     string logging2 = "after removeList, size = " + to_string(size);
     log->LOG(&memberNode->addr, logging2.c_str());
+
     for (int i=0;i<size;i++) {
 	auto& myEntry = memberNode->memberList[i];
         Address addr = getAddress(myEntry.getid(), myEntry.getport());
