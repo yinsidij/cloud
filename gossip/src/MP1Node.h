@@ -58,9 +58,9 @@ private:
 	char NULLADDR[6];
 
  	void addToMembershipList(Address& addr);
-	void mergeMembership(Address& addr, void* ptr, int size);
-	char* serializedMembership(vector<MemberListEntry>& membershipList);
-	void deserializedMembership(char* data, int size, vector<MemberListEntry>& membershipList);
+	void mergeMembership(Address& addr, vector<MemberListEntry>& membershipList);
+	char* serializeMembership(vector<MemberListEntry>& membershipList);
+	void deserializeMembership(char* data, int size, vector<MemberListEntry>& membershipList);
  	void send(Address& addr, MsgTypes type);
 	Address getAddress(int id, short port);
 
