@@ -302,8 +302,10 @@ void MP1Node::mergeMembership(Address& addr, vector<MemberListEntry>& membership
         for (auto& myEntry : memberNode->memberList) {
             if (myEntry.getid() == entry.getid() && myEntry.getport() == entry.getport()) {
                 found=true;
-                myEntry.heartbeat = max(myEntry.heartbeat, entry.heartbeat);
-                myEntry.timestamp = par->getcurrtime();
+		if (entry.heartbeat > myEntry.heartbeat) {
+                    myEntry.heartbeat = entry.heartbeat;
+		    myEntry.timestamp = par->getcurrtime();
+		}
             }
         }
         if (!found) {
