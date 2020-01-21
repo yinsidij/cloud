@@ -59,6 +59,7 @@ private:
 
  	void addToMembershipList(Address& addr);
 	void mergeMembership(Address& addr, vector<MemberListEntry>& membershipList);
+	void updateMembership(MemberListEntry& entry);
 	char* serializeMembership(vector<MemberListEntry>& membershipList);
 	void deserializeMembership(char* data, int size, vector<MemberListEntry>& membershipList);
  	void send(Address& addr, MsgTypes type);

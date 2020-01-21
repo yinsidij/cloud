@@ -135,6 +135,7 @@ int MP1Node::introduceSelfToGroup(Address *joinaddr) {
 	memcpy(&port, &memberNode->addr.addr[4], sizeof(short));
 	MemberListEntry entry(id,port,1/*heartbeat*/,par->getcurrtime());
 	memberNode->memberList.push_back(entry);
+        log->LOG(&memberNode->addr, "intorduceSelfToGroup");
 	log->logNodeAdd(&memberNode->addr, &memberNode->addr);
     }
     else {
@@ -235,14 +236,28 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 
     } else if (msg->msgType == JOINREP) {
         memberNode->inGroup = true;
-	vector<MemberListEntry> membershipList;
-	deserializeMembership(data,size,membershipList);
-	mergeMembership(addr,membershipList);
+        int id;
+	int port;
+	memcpy(&id, &memberNode->addr.addr[0], sizeof(int));
+	memcpy(&port, &memberNode->addr.addr[4], sizeof(short));
+	MemberListEntry entry(id,port,1/*heartbeat*/,par->getcurrtime());
+	memberNode->memberList.push_back(entry);
+	log->LOG(&memberNode->addr, "I received JOINREP, add myself");
+	log->logNodeAdd(&memberNode->addr, &memberNode->addr);
+
+	vector<MemberListEntry> receivedMembershipList;
+	deserializeMembership(data,size,receivedMembershipList);
+
+	log->LOG(&memberNode->addr, "I received JOINREP, merging from receivedMembershipList");
+	mergeMembership(addr,receivedMembershipList);
 
     } else if (msg->msgType == PING) {
-	vector<MemberListEntry> membershipList;
-	deserializeMembership(data,size,membershipList);
-	mergeMembership(addr,membershipList);
+	if (memberNode->inGroup) {
+	    vector<MemberListEntry> receivedMembershipList;
+	    deserializeMembership(data,size,receivedMembershipList);
+	    log->LOG(&memberNode->addr, "I received PING, merging from receivedMembershipList");
+	    mergeMembership(addr,receivedMembershipList);
+	}
     }
 
 }
@@ -264,6 +279,7 @@ void MP1Node::addToMembershipList(Address& addr) {
     MemberListEntry e(id,port,0/*heartbeat*/, par->getcurrtime());
     memberNode->memberList.push_back(e);
 
+    log->LOG(&memberNode->addr, "I received JOINREQ");
     log->logNodeAdd(&memberNode->addr, &addr);
 }
 
@@ -293,30 +309,38 @@ void MP1Node::send(Address& addr, MsgTypes type) {
     delete ptr;
 }
 
-void MP1Node::mergeMembership(Address& addr, vector<MemberListEntry>& membershipList) {
+void MP1Node::mergeMembership(Address& addr, vector<MemberListEntry>& receivedMembershipList) {
 
-    int size = membershipList.size();
+    string logging = "received from " + addr.getAddress();
+    log->LOG(&memberNode->addr, logging.c_str());
+    int size = receivedMembershipList.size();
     for (int i=0;i<size;i++) {
-	MemberListEntry entry = membershipList[i];
-        bool found=false;
-        for (auto& myEntry : memberNode->memberList) {
-	    // myEntry is self --- TODO
-            if (myEntry.getid() == entry.getid() && myEntry.getport() == entry.getport()) {
-                found=true;
-		if (entry.heartbeat > myEntry.heartbeat) {
-                    myEntry.heartbeat = entry.heartbeat;
-		    myEntry.timestamp = par->getcurrtime();
-		}
-            }
-        }
-        if (!found) {
-            // new entry
-            MemberListEntry e(entry);
-            e.timestamp = par->getcurrtime();
-            memberNode->memberList.push_back(e);
-            Address addr = getAddress(e.getid(), e.getport());
-            log->logNodeAdd(&memberNode->addr, &addr);
-        }
+	MemberListEntry entry = receivedMembershipList[i];
+	updateMembership(entry);
+    }
+}
+
+void MP1Node::updateMembership(MemberListEntry& entry) {
+    int id; //self id
+    int port; // self port
+    memcpy(&id,   &memberNode->addr.addr[0], sizeof(int));
+    memcpy(&port, &memberNode->addr.addr[4], sizeof(short));
+    for (int i=0;i<memberNode->memberList.size();i++) {
+	if (id == entry.getid() && port == entry.getport()) {
+	    if (entry.heartbeat > memberNode->memberList[i].heartbeat) {
+	        memberNode->memberList[i].heartbeat = entry.heartbeat;
+	        memberNode->memberList[i].timestamp = par->getcurrtime();
+	    }
+	    return;
+	}
+    }
+    if (entry.getheartbeat() != -1) {
+        MemberListEntry e(entry);
+        e.timestamp = par->getcurrtime();
+        memberNode->memberList.push_back(e);
+        Address addr = getAddress(e.getid(), e.getport());
+        log->LOG(&memberNode->addr, "from updateMembership");
+        log->logNodeAdd(&memberNode->addr, &addr);
     }
 }
 
@@ -350,14 +374,18 @@ void MP1Node::nodeLoopOps() {
 	    myEntry.settimestamp(par->getcurrtime());
 	    continue;
 	}
+        if (par->getcurrtime() - myEntry.timestamp >= TFAIL) {
+	    //mark the entry with heartheat -1 before serialiazation and send;
+	    myEntry.setheartbeat(-1);
+	}
         if (par->getcurrtime() - myEntry.timestamp >= TREMOVE) {
             toRemoveList.push_back(myEntry);
         } 
     }
 
     int size = memberNode->memberList.size();
-    string logging1 = "before removeList, size = " + to_string(size);
-    log->LOG(&memberNode->addr, logging1.c_str());
+    //string logging1 = "before removeList, size = " + to_string(size);
+    //log->LOG(&memberNode->addr, logging1.c_str());
 
     for (int i=0;i<size;i++) {
 	bool found = false;
@@ -380,8 +408,8 @@ void MP1Node::nodeLoopOps() {
     memberNode->memberList = newMemberList;
 
     size = memberNode->memberList.size();
-    string logging2 = "after removeList, size = " + to_string(size);
-    log->LOG(&memberNode->addr, logging2.c_str());
+    //string logging2 = "after removeList, size = " + to_string(size);
+    //log->LOG(&memberNode->addr, logging2.c_str());
 
     for (int i=0;i<size;i++) {
 	auto& myEntry = memberNode->memberList[i];
