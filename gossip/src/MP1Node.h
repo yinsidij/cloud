@@ -65,6 +65,7 @@ private:
  	void send(Address& addr, MsgTypes type);
 	Address getAddress(int id, short port);
 	void printSelfMemberList();
+	void markMemberList();
 
 public:
 	MP1Node(Member *, Params *, EmulNet *, Log *, Address *);

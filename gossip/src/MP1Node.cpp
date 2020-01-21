@@ -259,7 +259,9 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 	    vector<MemberListEntry> receivedMembershipList;
 	    deserializeMembership(data,size,receivedMembershipList);
 	    log->LOG(&memberNode->addr, "I received PING, merging from receivedMembershipList");
+	    printSelfMemberList();
 	    mergeMembership(addr,receivedMembershipList);
+	    printSelfMemberList();
 	}
     }
 
@@ -292,6 +294,7 @@ void MP1Node::addToMembershipList(Address& addr) {
 
 void MP1Node::send(Address& addr, MsgTypes type) {
 
+    markMemberList(); // TFAIL check
     int size = memberNode->memberList.size();
     size_t msgsize = sizeof(MessageHdr) + sizeof(Address) + sizeof(MemberListEntry)*size + 1;
     MessageHdr* msg;
@@ -330,23 +333,20 @@ void MP1Node::mergeMembership(Address& addr, vector<MemberListEntry>& receivedMe
 }
 
 void MP1Node::updateMembership(MemberListEntry& entry) {
-    //string identityOther = to_string(entry.getid()) + ":" + to_string(entry.getport());
-    //string loggingOther = "identityOther = " + identityOther;
-    //log->LOG(&memberNode->addr, loggingOther.c_str());
     int id; //self id
     short port; // self port
     memcpy(&id,   &memberNode->addr.addr[0], sizeof(int));
     memcpy(&port, &memberNode->addr.addr[4], sizeof(short));
 
-    printSelfMemberList();
-
     for (int i=0;i<memberNode->memberList.size();i++) {
 	if (memberNode->memberList[i].getid() == entry.getid() && memberNode->memberList[i].getport() == entry.getport()) {
 	    if (entry.heartbeat > memberNode->memberList[i].heartbeat) {
+		if (memberNode->memberList[i].heartbeat == -1) {
+                    string logging = "update time stamp with heartbeat == -1 due to address " + getAddress(entry.getid(), entry.getport()).getAddress();
+                    log->LOG(&memberNode->addr, logging.c_str());
+		}
 	        memberNode->memberList[i].heartbeat = entry.heartbeat;
 	        memberNode->memberList[i].timestamp = par->getcurrtime();
-                string logging = "update time stamp for address " + getAddress(entry.getid(), entry.getport()).getAddress();
-                log->LOG(&memberNode->addr, logging.c_str());
 	    }
 	    return;
 	}
@@ -357,6 +357,12 @@ void MP1Node::updateMembership(MemberListEntry& entry) {
         memberNode->memberList.push_back(e);
         Address addr = getAddress(e.getid(), e.getport());
 	string logging = addr.getAddress() + " is new, added to my membershipList";
+        log->LOG(&memberNode->addr, logging.c_str());
+        log->logNodeAdd(&memberNode->addr, &addr);
+    } else {
+        MemberListEntry e(entry);
+        Address addr = getAddress(e.getid(), e.getport());
+	string logging = addr.getAddress() + " has heartbeat -1";
         log->LOG(&memberNode->addr, logging.c_str());
         log->logNodeAdd(&memberNode->addr, &addr);
     }
@@ -384,21 +390,14 @@ void MP1Node::nodeLoopOps() {
     vector<MemberListEntry> newMemberList;
 
     for (auto& myEntry : memberNode->memberList) {
-        string logging0 = to_string(myEntry.getid()) + ":" + to_string(myEntry.getport()) + " timestamp = " + to_string(myEntry.timestamp);
-        log->LOG(&memberNode->addr, logging0.c_str());
 	if (id == myEntry.getid() && port == myEntry.getport()) {
 	// self. don't remove, but update the entry
 	    myEntry.setheartbeat(memberNode->heartbeat);
 	    myEntry.settimestamp(par->getcurrtime());
 	    continue;
 	}
-        if (par->getcurrtime() - myEntry.timestamp >= TFAIL) {
-	    //mark the entry with heartheat -1 before serialiazation and send;
-            string loggingCheck = "detected failure";
-            log->LOG(&memberNode->addr, loggingCheck.c_str());
-	    myEntry.setheartbeat(-1);
-	}
-        if (par->getcurrtime() - myEntry.timestamp >= TREMOVE) {
+
+        if (par->getcurrtime() - myEntry.gettimestamp() >= TREMOVE) {
             string loggingRemove = "detected removal";
             log->LOG(&memberNode->addr, loggingRemove.c_str());
             toRemoveList.push_back(myEntry);
@@ -406,8 +405,6 @@ void MP1Node::nodeLoopOps() {
     }
 
     int size = memberNode->memberList.size();
-    //string logging1 = "before removeList, size = " + to_string(size);
-    //log->LOG(&memberNode->addr, logging1.c_str());
 
     for (int i=0;i<size;i++) {
 	bool found = false;
@@ -430,8 +427,6 @@ void MP1Node::nodeLoopOps() {
     memberNode->memberList = newMemberList;
 
     size = memberNode->memberList.size();
-    //string logging2 = "after removeList, size = " + to_string(size);
-    //log->LOG(&memberNode->addr, logging2.c_str());
 
     // in gossip styple and select two neighbors by random
     // first entry of memberList is garanteed to self
@@ -514,8 +509,7 @@ char* MP1Node::serializeMembership(vector<MemberListEntry>& membershipList) {
 
 void MP1Node::deserializeMembership(char* data, int size, vector<MemberListEntry>& membershipList) {
 
-	//memcpy((char *)(msg+1) + 1 + sizeof(memberNode->addr.addr), &memberNode->heartbeat, sizeof(long));
-	//
+	// memcpy((char *)(msg+1) + 1 + sizeof(memberNode->addr.addr), &memberNode->heartbeat, sizeof(long));
 	int prefixSize = sizeof(MessageHdr)+sizeof(memberNode->addr.addr)+1;
 	int allEntrySize = size - prefixSize;
 	char* ptr = (char*)(data + prefixSize);
@@ -526,6 +520,16 @@ void MP1Node::deserializeMembership(char* data, int size, vector<MemberListEntry
 		membershipList.push_back(*pEntry);
 		pEntry++;
 	}
+}
+
+void MP1Node::markMemberList() {
+    for (auto& myEntry : memberNode->memberList) {
+        if (par->getcurrtime() - myEntry.gettimestamp() >= TFAIL) {
+	    string logging = "detected TFAIL for address " + getAddress(myEntry.getid(), myEntry.getport()).getAddress();
+	    log->LOG(&memberNode->addr, logging.c_str());
+	    myEntry.setheartbeat(-1);
+	}
+    }
 }
 
 void MP1Node::printSelfMemberList() {
