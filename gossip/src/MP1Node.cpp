@@ -130,12 +130,13 @@ int MP1Node::introduceSelfToGroup(Address *joinaddr) {
 #endif
         memberNode->inGroup = true;
 	int id;
-	int port;
+	short port;
 	memcpy(&id, &memberNode->addr.addr[0], sizeof(int));
 	memcpy(&port, &memberNode->addr.addr[4], sizeof(short));
-	MemberListEntry entry(id,port,1/*heartbeat*/,par->getcurrtime());
+	assert(memberNode->memberList.size() == 0);
+	MemberListEntry entry(id,port,memberNode->heartbeat/*heartbeat*/,par->getcurrtime());
 	memberNode->memberList.push_back(entry);
-        log->LOG(&memberNode->addr, "intorduceSelfToGroup");
+        log->LOG(&memberNode->addr, "introduceSelfToGroup");
 	log->logNodeAdd(&memberNode->addr, &memberNode->addr);
     }
     else {
@@ -237,10 +238,11 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
     } else if (msg->msgType == JOINREP) {
         memberNode->inGroup = true;
         int id;
-	int port;
+	short port;
 	memcpy(&id, &memberNode->addr.addr[0], sizeof(int));
 	memcpy(&port, &memberNode->addr.addr[4], sizeof(short));
-	MemberListEntry entry(id,port,1/*heartbeat*/,par->getcurrtime());
+	MemberListEntry entry(id,port,memberNode->heartbeat/*heartbeat*/,par->getcurrtime());
+	assert(memberNode->memberList.size() == 0);
 	memberNode->memberList.push_back(entry);
 	log->LOG(&memberNode->addr, "I received JOINREP, add myself");
 	log->logNodeAdd(&memberNode->addr, &memberNode->addr);
@@ -311,22 +313,37 @@ void MP1Node::send(Address& addr, MsgTypes type) {
 
 void MP1Node::mergeMembership(Address& addr, vector<MemberListEntry>& receivedMembershipList) {
 
-    string logging = "received from " + addr.getAddress();
+    string logging = "I started merging received membershipList from " + addr.getAddress() + " my membershipList size = " + to_string(memberNode->memberList.size());
     log->LOG(&memberNode->addr, logging.c_str());
     int size = receivedMembershipList.size();
     for (int i=0;i<size;i++) {
 	MemberListEntry entry = receivedMembershipList[i];
 	updateMembership(entry);
     }
+    string logging1 = "I finished merging received membershipList from " + addr.getAddress() + " my membershipList size = " + to_string(memberNode->memberList.size());
+    log->LOG(&memberNode->addr, logging1.c_str());
 }
 
 void MP1Node::updateMembership(MemberListEntry& entry) {
+    string identityOther = to_string(entry.getid()) + ":" + to_string(entry.getport());
+    string loggingOther = "identityOther = " + identityOther;
+    log->LOG(&memberNode->addr, loggingOther.c_str());
     int id; //self id
-    int port; // self port
+    short port; // self port
     memcpy(&id,   &memberNode->addr.addr[0], sizeof(int));
     memcpy(&port, &memberNode->addr.addr[4], sizeof(short));
+    string myMembershipList = "";
     for (int i=0;i<memberNode->memberList.size();i++) {
-	if (id == entry.getid() && port == entry.getport()) {
+
+	myMembershipList+=to_string(memberNode->memberList[i].getid());
+	myMembershipList+=":";
+	myMembershipList+=to_string(memberNode->memberList[i].getport());
+	myMembershipList+=" ";
+    }
+    log->LOG(&memberNode->addr, myMembershipList.c_str());
+
+    for (int i=0;i<memberNode->memberList.size();i++) {
+	if (memberNode->memberList[i].getid() == entry.getid() && memberNode->memberList[i].getport() == entry.getport()) {
 	    if (entry.heartbeat > memberNode->memberList[i].heartbeat) {
 	        memberNode->memberList[i].heartbeat = entry.heartbeat;
 	        memberNode->memberList[i].timestamp = par->getcurrtime();
@@ -339,7 +356,8 @@ void MP1Node::updateMembership(MemberListEntry& entry) {
         e.timestamp = par->getcurrtime();
         memberNode->memberList.push_back(e);
         Address addr = getAddress(e.getid(), e.getport());
-        log->LOG(&memberNode->addr, "from updateMembership");
+	string logging = addr.getAddress() + " is new, added to my membershipList";
+        log->LOG(&memberNode->addr, logging.c_str());
         log->logNodeAdd(&memberNode->addr, &addr);
     }
 }
@@ -359,7 +377,7 @@ void MP1Node::nodeLoopOps() {
     memberNode->heartbeat++;
 
     int id;
-    int port;
+    short port;
     memcpy(&id, &memberNode->addr.addr[0], sizeof(int));
     memcpy(&port, &memberNode->addr.addr[4], sizeof(short));
     vector<MemberListEntry> toRemoveList;
