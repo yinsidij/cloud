@@ -251,7 +251,9 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 	deserializeMembership(data,size,receivedMembershipList);
 
 	log->LOG(&memberNode->addr, "I received JOINREP, merging from receivedMembershipList");
+	printSelfMemberList("start");
 	mergeMembership(addr,receivedMembershipList);
+	printSelfMemberList("end");
 
     } else if (msg->msgType == PING) {
 	if (memberNode->inGroup) {
@@ -259,9 +261,9 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 	    vector<MemberListEntry> receivedMembershipList;
 	    deserializeMembership(data,size,receivedMembershipList);
 	    log->LOG(&memberNode->addr, "I received PING, merging from receivedMembershipList");
-	    printSelfMemberList();
+	    printSelfMemberList("start");
 	    mergeMembership(addr,receivedMembershipList);
-	    printSelfMemberList();
+	    printSelfMemberList("end");
 	}
     }
 
@@ -340,11 +342,14 @@ void MP1Node::updateMembership(MemberListEntry& entry) {
 
     for (int i=0;i<memberNode->memberList.size();i++) {
 	if (memberNode->memberList[i].getid() == entry.getid() && memberNode->memberList[i].getport() == entry.getport()) {
+	    if (memberNode->memberList[i].heartbeat == -1) {
+		return;
+	    }
 	    if (entry.heartbeat > memberNode->memberList[i].heartbeat) {
-		if (memberNode->memberList[i].heartbeat == -1) {
-                    string logging = "update time stamp with heartbeat == -1 due to address " + getAddress(entry.getid(), entry.getport()).getAddress();
-                    log->LOG(&memberNode->addr, logging.c_str());
-		}
+		//if (memberNode->memberList[i].heartbeat == -1) {
+                //    string logging = "update time stamp with heartbeat == -1 due to address " + getAddress(entry.getid(), entry.getport()).getAddress();
+                //    log->LOG(&memberNode->addr, logging.c_str());
+		//}
 	        memberNode->memberList[i].heartbeat = entry.heartbeat;
 	        memberNode->memberList[i].timestamp = par->getcurrtime();
 	    }
@@ -359,13 +364,15 @@ void MP1Node::updateMembership(MemberListEntry& entry) {
 	string logging = addr.getAddress() + " is new, added to my membershipList";
         log->LOG(&memberNode->addr, logging.c_str());
         log->logNodeAdd(&memberNode->addr, &addr);
-    } else {
-        MemberListEntry e(entry);
-        Address addr = getAddress(e.getid(), e.getport());
-	string logging = addr.getAddress() + " has heartbeat -1";
-        log->LOG(&memberNode->addr, logging.c_str());
-        log->logNodeAdd(&memberNode->addr, &addr);
-    }
+    } 
+    //else 
+    //{
+    //    MemberListEntry e(entry);
+    //    Address addr = getAddress(e.getid(), e.getport());
+    //	string logging = addr.getAddress() + " has heartbeat -1";
+    //    log->LOG(&memberNode->addr, logging.c_str());
+        // log->logNodeAdd(&memberNode->addr, &addr);
+    //}
 }
 
 /**
@@ -430,7 +437,7 @@ void MP1Node::nodeLoopOps() {
 
     // in gossip styple and select two neighbors by random
     // first entry of memberList is garanteed to self
-    int gossips = 2;
+    int gossips = 3;
     if (size>1) {
 	    while (gossips>0) {
 	        int neighbor = rand() % (size-1) + 1; // random number from 1 to size()-1;
@@ -523,18 +530,22 @@ void MP1Node::deserializeMembership(char* data, int size, vector<MemberListEntry
 }
 
 void MP1Node::markMemberList() {
+    printSelfMemberList("start");
     for (auto& myEntry : memberNode->memberList) {
-        if (par->getcurrtime() - myEntry.gettimestamp() >= TFAIL) {
-	    string logging = "detected TFAIL for address " + getAddress(myEntry.getid(), myEntry.getport()).getAddress();
+        if (par->getcurrtime() - myEntry.gettimestamp() > TFAIL) {
+	    string logging = "detected TFAIL for address " + getAddress(myEntry.getid(), myEntry.getport()).getAddress() + " and set its heartbeat to -1";
+	    logging += " reason: " + to_string(par->getcurrtime()) + " " + to_string(myEntry.gettimestamp());
 	    log->LOG(&memberNode->addr, logging.c_str());
 	    myEntry.setheartbeat(-1);
 	}
     }
+    printSelfMemberList("end");
 }
 
-void MP1Node::printSelfMemberList() {
+void MP1Node::printSelfMemberList(string&& identifier) {
     for (int i=0;i<memberNode->memberList.size();i++) {
-        string entry = "";
+        string entry = identifier;
+        entry += " ";
         entry+=to_string(memberNode->memberList[i].getid());
 	entry+=":";
         entry+=to_string(memberNode->memberList[i].getport());

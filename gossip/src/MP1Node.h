@@ -64,7 +64,7 @@ private:
 	void deserializeMembership(char* data, int size, vector<MemberListEntry>& membershipList);
  	void send(Address& addr, MsgTypes type);
 	Address getAddress(int id, short port);
-	void printSelfMemberList();
+	void printSelfMemberList(string&& identifier);
 	void markMemberList();
 
 public:
